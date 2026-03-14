@@ -190,9 +190,13 @@ def _send_to_new(
     """Send a published email to subscribers who haven't received it."""
     console.print(f"Checking recipients for '{subject}'...")
 
-    # Get subscribers who already received this email
-    events = client.list_events(email_id=email_id, event_type="delivered")
-    already_received = {e["subscriber_id"] for e in events}
+    # Get subscribers who already had a send attempted for this email
+    # Check delivered, attempted, and bounced to match Buttondown's
+    # EMAIL_ALREADY_SENT guard which prevents re-sending after any attempt
+    already_received: set[str] = set()
+    for event_type in ("delivered", "attempted", "bounced"):
+        events = client.list_events(email_id=email_id, event_type=event_type)
+        already_received.update(e["subscriber_id"] for e in events)
 
     # Get all active subscribers
     all_subscribers = client.list_subscribers(subscriber_type=["regular"])
