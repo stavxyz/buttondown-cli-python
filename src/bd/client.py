@@ -79,9 +79,6 @@ class ButtondownClient:
     def get_email(self, email_id: str) -> dict:
         return self._get(f"/emails/{email_id}")
 
-    def get_email_analytics(self, email_id: str) -> dict:
-        return self._get(f"/emails/{email_id}/analytics")
-
     # --- Subscribers ---
 
     def list_subscribers(
