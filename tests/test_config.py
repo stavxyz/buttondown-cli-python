@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bd.config import resolve_config
+from bd.config import ConfigError, resolve_config
 
 BD_ENV_KEYS = ("BD_API_KEY", "BD_NEWSLETTER")
 
@@ -91,14 +91,33 @@ class TestConfigResolution:
         assert cfg.api_key == "nbbw-key"
         assert cfg.newsletter == "nbbw-newsletter"
 
-    def test_missing_api_key_raises_error(self, clean_bd_env, tmp_path):
+    def test_missing_api_key_raises_config_error(self, clean_bd_env, tmp_path):
         config_path = tmp_path / "nonexistent.toml"
-        with pytest.raises(SystemExit):
+        with pytest.raises(ConfigError, match="No API key found"):
             resolve_config(
                 api_key=None,
                 newsletter=None,
                 config_path=config_path,
             )
+
+    def test_invalid_toml_raises_config_error(self, clean_bd_env, config_file):
+        path = config_file("not valid toml {{{{")
+        with pytest.raises(ConfigError, match="Could not parse"):
+            resolve_config(api_key=None, newsletter=None, config_path=path)
+
+    def test_missing_profile_warns(self, clean_bd_env, config_file, capsys):
+        path = config_file("""\
+            [production]
+            api_key = "prod-key"
+        """)
+        with pytest.raises(ConfigError, match="No API key found"):
+            resolve_config(
+                api_key=None,
+                newsletter=None,
+                profile="staging",
+                config_path=path,
+            )
+        assert "Profile [staging] not found" in capsys.readouterr().err
 
     def test_newsletter_is_optional(self, clean_bd_env, config_file):
         path = config_file("""\
