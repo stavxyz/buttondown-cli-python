@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -38,6 +39,8 @@ class ButtondownClient:
     def _post(self, path: str, json: Optional[dict] = None) -> dict:
         resp = self._client.post(path, json=json)
         resp.raise_for_status()
+        if not resp.content:
+            return {}
         return resp.json()
 
     def _paginate(
@@ -47,23 +50,27 @@ class ButtondownClient:
         limit: Optional[int] = None,
     ) -> list[dict]:
         """Fetch all pages of a paginated endpoint, optionally truncated to limit."""
-        results = []
+        results: list[dict] = []
         params = dict(params or {})
         while True:
             data = self._get(path, params=params)
             results.extend(data.get("results", []))
+            if limit is not None and len(results) >= limit:
+                return results[:limit]
             next_url = data.get("next")
             if not next_url:
                 break
-            # next_url is absolute — parse page param from it
             parsed = urlparse(next_url)
             page_values = parse_qs(parsed.query).get("page", [])
             if page_values:
                 params["page"] = page_values[0]
             else:
+                print(
+                    f"Warning: Could not parse next page URL: {next_url}. "
+                    f"Results may be incomplete ({len(results)} items fetched).",
+                    file=sys.stderr,
+                )
                 break
-        if limit is not None:
-            return results[:limit]
         return results
 
     # --- Emails ---
