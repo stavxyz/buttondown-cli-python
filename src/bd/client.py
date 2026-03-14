@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -39,8 +40,13 @@ class ButtondownClient:
         resp.raise_for_status()
         return resp.json()
 
-    def _paginate(self, path: str, params: Optional[dict] = None) -> list[dict]:
-        """Fetch all pages of a paginated endpoint."""
+    def _paginate(
+        self,
+        path: str,
+        params: Optional[dict] = None,
+        limit: Optional[int] = None,
+    ) -> list[dict]:
+        """Fetch all pages of a paginated endpoint, optionally truncated to limit."""
         results = []
         params = dict(params or {})
         while True:
@@ -50,13 +56,14 @@ class ButtondownClient:
             if not next_url:
                 break
             # next_url is absolute — parse page param from it
-            from urllib.parse import urlparse, parse_qs
             parsed = urlparse(next_url)
             page_values = parse_qs(parsed.query).get("page", [])
             if page_values:
                 params["page"] = page_values[0]
             else:
                 break
+        if limit is not None:
+            return results[:limit]
         return results
 
     # --- Emails ---
@@ -67,10 +74,7 @@ class ButtondownClient:
         params: dict[str, Any] = {}
         if status:
             params["status"] = status
-        if limit:
-            all_emails = self._paginate("/emails", params)
-            return all_emails[:limit]
-        return self._paginate("/emails", params)
+        return self._paginate("/emails", params, limit=limit)
 
     def get_email(self, email_id: str) -> dict:
         return self._get(f"/emails/{email_id}")
@@ -91,10 +95,7 @@ class ButtondownClient:
             params["type"] = subscriber_type
         if ordering:
             params["ordering"] = ordering
-        if limit:
-            all_subs = self._paginate("/subscribers", params)
-            return all_subs[:limit]
-        return self._paginate("/subscribers", params)
+        return self._paginate("/subscribers", params, limit=limit)
 
     # --- Events ---
 

@@ -3,115 +3,112 @@ import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from bd.config import resolve_config
+
+BD_ENV_KEYS = ("BD_API_KEY", "BD_NEWSLETTER")
+
+
+@pytest.fixture()
+def clean_bd_env():
+    """Ensure BD_API_KEY and BD_NEWSLETTER are not in the environment."""
+    cleaned = {k: v for k, v in os.environ.items() if k not in BD_ENV_KEYS}
+    with patch.dict(os.environ, cleaned, clear=True):
+        yield
+
+
+@pytest.fixture()
+def config_file(tmp_path):
+    """Return a helper that writes a TOML config file and returns its path."""
+    path = tmp_path / "config.toml"
+
+    def _write(content: str) -> Path:
+        path.write_text(textwrap.dedent(content))
+        return path
+
+    return _write
 
 
 class TestConfigResolution:
     """Config precedence: CLI flags > env vars > config file."""
 
-    def test_cli_flags_take_precedence_over_everything(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text(textwrap.dedent("""\
+    def test_cli_flags_take_precedence_over_everything(self, config_file):
+        path = config_file("""\
             [default]
             api_key = "from-file"
-        """))
+        """)
         with patch.dict(os.environ, {"BD_API_KEY": "from-env"}):
             cfg = resolve_config(
                 api_key="from-cli",
                 newsletter=None,
-                profile="default",
-                config_path=config_file,
+                config_path=path,
             )
         assert cfg.api_key == "from-cli"
 
-    def test_env_vars_take_precedence_over_config_file(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text(textwrap.dedent("""\
+    def test_env_vars_take_precedence_over_config_file(self, config_file):
+        path = config_file("""\
             [default]
             api_key = "from-file"
-        """))
+        """)
         with patch.dict(os.environ, {"BD_API_KEY": "from-env"}):
             cfg = resolve_config(
                 api_key=None,
                 newsletter=None,
-                profile="default",
-                config_path=config_file,
+                config_path=path,
             )
         assert cfg.api_key == "from-env"
 
-    def test_config_file_used_when_no_flag_or_env(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text(textwrap.dedent("""\
+    def test_config_file_used_when_no_flag_or_env(self, clean_bd_env, config_file):
+        path = config_file("""\
             [default]
             api_key = "from-file"
             newsletter = "nl-123"
-        """))
-        with patch.dict(os.environ, {}, clear=True):
-            env_keys = ["BD_API_KEY", "BD_NEWSLETTER"]
-            cleaned = {k: v for k, v in os.environ.items() if k not in env_keys}
-            with patch.dict(os.environ, cleaned, clear=True):
-                cfg = resolve_config(
-                    api_key=None,
-                    newsletter=None,
-                    profile="default",
-                    config_path=config_file,
-                )
+        """)
+        cfg = resolve_config(
+            api_key=None,
+            newsletter=None,
+            config_path=path,
+        )
         assert cfg.api_key == "from-file"
         assert cfg.newsletter == "nl-123"
 
-    def test_named_profile(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text(textwrap.dedent("""\
+    def test_named_profile(self, clean_bd_env, config_file):
+        path = config_file("""\
             [default]
             api_key = "default-key"
 
             [nbbw]
             api_key = "nbbw-key"
             newsletter = "nbbw-newsletter"
-        """))
-        with patch.dict(os.environ, {}, clear=True):
-            env_keys = ["BD_API_KEY", "BD_NEWSLETTER"]
-            cleaned = {k: v for k, v in os.environ.items() if k not in env_keys}
-            with patch.dict(os.environ, cleaned, clear=True):
-                cfg = resolve_config(
-                    api_key=None,
-                    newsletter=None,
-                    profile="nbbw",
-                    config_path=config_file,
-                )
+        """)
+        cfg = resolve_config(
+            api_key=None,
+            newsletter=None,
+            profile="nbbw",
+            config_path=path,
+        )
         assert cfg.api_key == "nbbw-key"
         assert cfg.newsletter == "nbbw-newsletter"
 
-    def test_missing_api_key_raises_error(self, tmp_path):
-        config_file = tmp_path / "nonexistent.toml"
-        import pytest
-        with patch.dict(os.environ, {}, clear=True):
-            env_keys = ["BD_API_KEY", "BD_NEWSLETTER"]
-            cleaned = {k: v for k, v in os.environ.items() if k not in env_keys}
-            with patch.dict(os.environ, cleaned, clear=True):
-                with pytest.raises(SystemExit):
-                    resolve_config(
-                        api_key=None,
-                        newsletter=None,
-                        profile="default",
-                        config_path=config_file,
-                    )
+    def test_missing_api_key_raises_error(self, clean_bd_env, tmp_path):
+        config_path = tmp_path / "nonexistent.toml"
+        with pytest.raises(SystemExit):
+            resolve_config(
+                api_key=None,
+                newsletter=None,
+                config_path=config_path,
+            )
 
-    def test_newsletter_is_optional(self, tmp_path):
-        config_file = tmp_path / "config.toml"
-        config_file.write_text(textwrap.dedent("""\
+    def test_newsletter_is_optional(self, clean_bd_env, config_file):
+        path = config_file("""\
             [default]
             api_key = "key-only"
-        """))
-        with patch.dict(os.environ, {}, clear=True):
-            env_keys = ["BD_API_KEY", "BD_NEWSLETTER"]
-            cleaned = {k: v for k, v in os.environ.items() if k not in env_keys}
-            with patch.dict(os.environ, cleaned, clear=True):
-                cfg = resolve_config(
-                    api_key=None,
-                    newsletter=None,
-                    profile="default",
-                    config_path=config_file,
-                )
+        """)
+        cfg = resolve_config(
+            api_key=None,
+            newsletter=None,
+            config_path=path,
+        )
         assert cfg.api_key == "key-only"
         assert cfg.newsletter is None
