@@ -68,7 +68,7 @@ def emails(
         results = client.list_emails(status=status_filter, limit=limit)
 
     table = Table(title="Emails")
-    table.add_column("ID", style="dim", max_width=12)
+    table.add_column("ID", style="dim", no_wrap=True)
     table.add_column("Subject", style="bold")
     table.add_column("Date")
     table.add_column("Status")
@@ -77,7 +77,7 @@ def emails(
     for email in results:
         analytics = email.get("analytics") or {}
         table.add_row(
-            email["id"][:12],
+            email["id"],
             email.get("subject", "(no subject)"),
             (email.get("publish_date") or email.get("creation_date", ""))[:10],
             email.get("status", ""),
